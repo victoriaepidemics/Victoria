@@ -1,0 +1,7 @@
+scipy>=1.5.0
+numpy>=1.18.5
+matplotlib>=3.2.2
+dacite>=1.5.1
+pandas>=1.0.5
+hjson>=3.0.2
+dataclasses

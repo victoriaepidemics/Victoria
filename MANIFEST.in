@@ -1,0 +1,8 @@
+include victoriaepi/configparsing/calls/*py
+include victoriaepi/configparsing/models/*py
+include victoriaepi/configparsing/models/buildingblocks/*py
+include victoriaepi/examples/*py
+include victoriaepi/examples/*hjson
+global-exclude *auto*py
+
+

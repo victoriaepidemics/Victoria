@@ -1,0 +1,6 @@
+m2r
+autodocsumm
+sphinxcontrib-programoutput
+sphinxcontrib-spelling
+sphinx-code-include
+

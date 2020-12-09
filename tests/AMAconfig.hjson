@@ -1,0 +1,596 @@
+{
+# with open("AMAconfig.hjson","r") as f:rawcfg = hjson.loads(f.read())
+complexity: intervention
+className: ama2
+moduleName: autoAMA
+#version control
+baseModelVersion: "1.2.3"
+ModelMatrix:{
+        #defining forward map
+        prnDefault:False
+        names: "S E I^A I^S I^B H^1 H^2 H^3 U^1 U^2 D R"
+        BaseVar: S
+        Exits:{
+          #T.Exit( 'S', 'E')
+          "S" : {"E":{}}
+
+          #T.SplitExit( 'E', 'I^A', 'I^S', 1-f, prob_symb=['1-f','f'])
+          "E" : {
+              "I^A":{
+                  "prob":1-f
+                  "prob_symb":'1-f'
+                  }
+              "I^S":{
+                  "prob":f
+                  "prob_symb":'f'}
+                  }
+
+          #T.Exit( 'I^A', 'R')
+          "I^A" : {"R":{}}
+
+          #T.SplitExit( 'I^S', 'H^1', 'I^B', g, prob_symb=['g', '1-g'])
+          "I^S" : {
+              "H^1":{
+                  "prob":g
+                  "prob_symb":'g'}
+              "I^B":{
+                  "prob":1-g
+                  "prob_symb":'1-g'
+                  }
+                  }
+
+          #T.Exit( 'I^B', 'R')
+          "I^B" : {"R":{}}
+
+          #T.SplitExit( 'H^1', 'U^1', 'H^2', h, prob_symb=['h', '1-h'])
+          "H^1" : {
+          "U^1":{"prob":h
+                  "prob_symb":'h'}
+                  "H^2":{"prob":1-h
+                  "prob_symb":'1-h'}}
+
+          #T.Exit( 'H^2', 'R')
+          "H^2" : {"R":{}}
+
+          #T.Exit( 'U^1', 'U^2')
+          "U^1" : {"U^2":{}}
+
+          #T.SplitExit( 'U^2', 'D', 'H^3', i, prob_symb=['i', '1-i'])
+          "U^2" : {
+          "D":{"prob":i
+                  "prob_symb":'i'}
+                  "H^3":{"prob":1-i
+                  "prob_symb":'1-i'}}
+
+          #T.Exit( 'H^3', 'R')
+          "H^3" : {"R":{}}
+
+          #T.NoExit('R')
+          "R" : {}
+          #T.NoExit('D')
+          "D" : {}
+        }
+        ExitFractions:{
+            # fraction of severe infections
+            f:"0.5"
+            # fraction of severe infections that require hospitalization
+            g:0.04375
+            # fraction of hospitations that require ICU
+            h:0.25
+            # fraction of ICU patients who die
+            i:0.5
+        }
+        # NoExit: D
+    }
+num_pars : 3 # Number of parameters to be inferred
+factor_foi: 0.1*20
+#%% model call
+ModelCall:{
+   Region:"CDMX COVID-19"
+   instanceName: seidinstance
+   # population size
+    N:261
+    burnin:1000
+    # Data file name, should be in workdir + 'data/' + data_fnam
+    # Make sure to process data into a vertical text array
+    # workdir/data/id.csv
+    # where id is the identifiacion of the metro zone to be analyzed.
+    # The first column is daily deaths and the second daily confirmed cases
+    data_fnam:"9-01.csv"
+    "out_fnam":"auto_9-01" # MCMC output file name, without .txt, workdir/output/out_fnam + '.txt'
+    "init_index":0 # day number from data start, where to start the plot
+    "init_date":"date(2020, 4, 1)"# date of init_index
+    "trim":0,# how many data points to trim
+    pred: 150
+    plotpred: 28
+    "workdir":"./../amafromconfig/"
+    T:10000
+    plot_fit:False
+    #probability of recording an infection
+    Pobs_I:0.85
+    # probability of recording a death
+    Pobs_D:0.95
+    #Time to symptoms (days)
+    daysdelay: 4
+    # Residence rates 1/day, names and Erlang series
+    "R_rates":{
+        'E':{
+            residenceRate:1/5
+            name:\sigma_1
+            erlang:4
+            }
+        'I^S':{
+            residenceRate:1/4
+            name:\sigma_2
+            erlang:3
+           }
+        'H^1':{
+            residenceRate:1/1
+            name:\sigma_3
+            erlang:1
+            }
+        'U^1':{
+            residenceRate:1/5
+            name:\sigma_4
+            erlang:3
+            }
+        'U^2':{
+            residenceRate:1/1
+            name:\sigma_5
+            erlang:1
+            }
+        'I^A':{
+            residenceRate:1/7
+            name:\gamma_1
+            erlang:3
+            }
+        'I^B':{
+            residenceRate:1/7
+            name:\gamma_2
+            erlang:3
+            }
+        'H^2':{
+            residenceRate:1/6
+            name:\gamma_3
+            erlang:3
+            }
+        'H^3':{
+            residenceRate:1/3.3
+            name:\gamma_4
+            erlang:1
+            }
+    }
+    # General information for the metro zone or region to be analyzed
+    Zone:{
+        id: "clave9-01"
+        name: "Mexico city"
+        num_relax_days: 2
+        population: 21.942666e6
+        init_date: date(2020, 2, 27)
+        intervention_n_relax_dates: [ "date(2020, 3, 22)", "date(2020, 4, 3)", "date(2020, 5, 10)", "date(2020, 6, 3)"]
+    }
+    plottingQuantiles: [10,25,50,75,90]
+}
+odeint: "integrate.odeint( rhs, X0, t_quad, args)"
+
+solvingMethods:{
+    rhs:{
+        defn:'rhs( self, x, t, p)'
+        body:
+        '''
+        beta1 = p[3 + np.where(t < self.intervention_day)[0][0]]
+
+        I_A = np.sum(x * self.mask_IAs_flat) # total number of asymptomatic infections
+        I_S = np.sum(x * self.mask_ISs_flat) # total number of asymptomatic infections
+        #S = np.sum(x * self.mask_S) # foi *= (2*S/self.N)
+
+        #
+         #force of infection beta1*I^A/N + some factor of  beta1*I^S/N
+        foi = (I_A + self.factor_foi*I_S)/self.N * beta1
+
+        self.par[self.T.ConvertVar('S')] = foi
+
+        return self.T.M @ (x * (self.T.par_mask @ self.par))
+        '''
+        }
+    solve_plain1:{
+        defn:'solve_plain1(self, p, quad=True)'
+        body:
+        '''
+        """
+        Solve the initial value problem
+        """
+        #beta_1 = p[0] # asymptomatic infection rate
+        #beta_2 = p[1] # hospitalized infection rate
+
+        self.X0 *= 0
+        self.X0 += p[0]*self.mask_E
+        self.X0 += p[1]*self.mask_IA
+        self.X0 += p[2]*self.mask_IS
+        self.X0 += (self.N-p[0]-p[1]-p[2])*self.mask_S
+        if quad:
+            return odeint(self.rhs, self.X0, self.t_quad, args=(p,))
+        else:
+            return odeint(self.rhs, self.X0, self.time, args=(p,))
+        '''
+        }
+    solve_plain2:{
+        defn:'solve_plain2(self, p, quad=True)'
+        body:
+        '''
+        """
+        Solve the initial value problem with relaxation day
+        """
+        self.N = p[-self.num_omegas]*self.N_org #\omega_0*N_org, first N_eff
+
+        self.X0 *= 0
+        self.X0 += p[0]*self.mask_E
+        self.X0 += p[1]*self.mask_IA
+        self.X0 += p[2]*self.mask_IS
+        self.X0 += (self.N-p[0]-p[1]-p[2])*self.mask_S
+        if quad:
+            rt = odeint(self.rhs, self.X0,\
+                          self.t_quad[self.t_quad < self.relax_day[0]], args=(p,))
+        else:
+            rt = odeint(self.rhs, self.X0,\
+                          self.time[self.time < self.relax_day[0]], args=(p,))
+
+        for i in self.omega_ite[1:]:
+            N = self.N
+            self.N = p[i]*self.N_org # \omega_i*N_org = self.N_new > N = \omega_{i-1}*N_org
+            X0 = rt[-1,:] # last values for state vars, initial conds after next relaxation day
+            X0[0] += self.N - N #New amount of suceptibles: The remaining + the added bunch
+            if quad:
+                rt2 = odeint(self.rhs, X0,\
+                          self.t_quad[(self.relax_day[i-1] <= self.t_quad) *  (self.t_quad < self.relax_day[i])], args=(p,))
+            else:
+                rt2 = odeint(self.rhs, X0,\
+                          self.time[(self.relax_day[i-1] <= self.time) * (self.time < self.relax_day[i])], args=(p,))
+            rt = np.append( rt, rt2, axis=0)
+
+        return rt
+        '''
+        }
+    solve:{
+        defn:'solve( self, p)'
+        body:
+        '''
+        """
+        Solve the initial value problem:
+        Integral of incidence between observation times
+        """
+        # Use the solver:
+
+        self.soln = self.solve_plain( p )
+
+        # Integrate to produce accumulated number of infected
+        for k in range( 0, self.nn-1):
+            #x_e = self.soln[ (10*k):(10*(k+1)+1),:] @ self.mask_E
+            #incidence = self.f*self.sigma_1*x_e #To hospital
+            #self.result_I[k] = self.dt*np.dot(self.weigths,incidence)
+            x_s = np.sum( self.soln[ (10*k):(10*(k+1)+1),:] @ self.mask_ISs, axis=1)
+            incidence = self.g*self.sigma_2*x_s #To hospital
+            self.result_H1[k] = self.dt*np.dot(self.weigths,incidence)
+        return self.result_H1, np.diff(self.soln[::10,:] @ self.mask_D)#, self.result_H1
+        '''
+        }
+    llikelihood:{
+        defn:'llikelihood( self, p)'
+        body:
+        '''
+        #if support(p): # Not necessary, the twalk checks it already before acllin energy support(p):
+        # negative binomial likelihood
+        mu_I, mu_D = self.solve(p)
+        mu_I +=3
+        mu_D +=3
+        mu_I *= self.Pobs_I
+        mu_D *= self.Pobs_D
+        # negative binomial likelihood for infectious individuals
+        omega = 2.0 #1
+        theta = 4.0#1.0 #0.01
+        r = mu_I/(omega-1.0+theta*mu_I)
+        q = 1.0/(omega+theta*mu_I)
+        log_likelihood_I = np.sum(ss.nbinom.logpmf( self.data[:,1]+3, r, q))
+        # negative binomial likelihood for deaths
+        omega = 2.0
+        theta = 4.0 #0.5   #antonio 0.5
+        r = mu_D/(omega-1.0+theta*mu_D)
+        q = 1.0/(omega+theta*mu_D)
+        log_likelihood_D = np.sum(ss.nbinom.logpmf( self.data[:,0]+3,r,q))
+        # joint likelihood
+        log_likelihood = log_likelihood_D + log_likelihood_I
+
+        return log_likelihood
+        '''
+        }
+    lprior:{
+        defn:'lprior( self, p)'
+        body:
+        '''
+       # Log priors:
+        log_prior = 0.0
+        # gamma prior distribution parameters for E(0)
+        log_prior += ss.gamma.logpdf(p[0],1.0,scale=10.0)
+        # gamma prior distribution parameters for IA(0)
+        log_prior += ss.gamma.logpdf(p[1],1.0,scale=10.0)
+        # gamma prior distribution parameters for IS(0)
+        log_prior += ss.gamma.logpdf(p[2],1.0,scale=10.0)
+
+
+
+        # \beta_i and \omega_i's run in pairs
+        # log-normal prior distribution parameters for beta_i
+        log_prior += np.sum(ss.lognorm.logpdf(p[3], 1.0, scale=1.0)) #scale=np.exp(0.0)
+        for i in range(1, self.num_betas):
+            log_prior += np.sum(ss.lognorm.logpdf(p[3+i], 1.0, scale=p[3+i-1])) #scale=np.exp(log(p[i-1]))
+
+
+        if self.relax_day != []:
+            for i in self.omega_ite:
+                log_prior += ss.beta.logpdf( p[i], 1+1/6, 1+1/3)
+
+        return log_prior
+        '''
+        }
+    support:{
+        defn:'support( self, p)'
+        body:
+        '''
+        rt = True
+        rt &= (0.0 < p[0] < 10.0**3)
+        rt &= (0.0 < p[1] < 10.0**3)
+        rt &= (0.0 < p[2] < 10.0**3)
+        # All betas (and omegas, to make it simple!) in [0,20]
+        rt &= all((0.0 < p[3:]) * (p[3:] < 20.0))
+        if not(rt):
+            return False # Fast track, avoid checking the omegas, if any
+
+
+        if self.relax_day != []:
+            rt &= (0.0 < p[-self.num_omegas] < 1.0) #\omega0
+            rt &= ( p[-self.num_omegas]*self.N_org-p[0]-p[1]-p[2] > 0.0)
+            for i in self.omega_ite[:-1]:
+                rt &= (p[i] < p[i+1] < 1.0) #\omega_i < \omega_{i+1}
+
+        return rt
+        '''
+        }
+    sim_init:{
+        defn:'sim_init(self)'
+        body:
+        '''
+        """Simulate initial values for mcmc."""
+        p = np.zeros(self.num_pars)
+        p[0] = np.random.uniform(low = 0.01, high = 10.0)
+        p[1] = np.random.uniform(low = 0.01, high = 10.0)
+        p[2] = np.random.uniform(low = 0.01, high = 10.0)
+
+        p[3:] = np.random.uniform(low = 0.01, high = 5.0, size=self.num_pars-3)
+
+
+        if self.relax_day != []:
+            p[-self.num_omegas] = ss.beta.rvs( 2.0, 4.0)
+            for i in self.omega_ite[:-1]:
+                p[i+1] = p[i] + (1-p[i])*ss.uniform.rvs()
+
+        return p
+        '''
+        }
+    }
+
+plottingMethods:{
+    PlotEvolution:{
+        defn:
+        '''
+        PlotEvolution( self, pred, ty=0, cumm=False, log=False, ax=None,\
+                       csv_fnam=None, q=[ 10, 25, 50, 75, 90], blue=True, add_MRE=False,\
+                       color='red', color_q='black', label='Mediana', right_axis=True, label_cases=True)
+        '''
+        body:
+        '''
+        """ pred: number of days to predict
+            ty: 0 = Infected,1 = deaths
+            cumm: True if cumulative, default False
+            log: True if y log scale, default False
+            ax: axis where to print the plot (optional)
+            csv_fnam: name of file to save the data for the plot (optional)
+        """
+
+        if ax == None:
+            fig = plt.figure(figsize=(12,10))
+            ax = fig.gca()
+        else:
+            fig = None
+
+        # Prepare data for comparisons
+        if ty == 0:
+            data = self.data[:,1] # Infected REPORTED
+            data_trimed = self.data_trimed[:,1]
+            title = 'Daily confirmed cases'
+        else:
+            data = self.data[:,0] # Deaths REPORTED
+            data_trimed = self.data_trimed[:,0]
+            title = 'Decesos'
+
+        if isinstance(self.Pobs_I,float):
+            Pobs = (self.Pobs_I, self.Pobs_D)
+        else: #nowcasting, for plotting use only the limit nowcasting proportion, ie ignore the nowcasting
+            Pobs = (self.Pobs_I[0], self.Pobs_D[0])
+
+        # cumulative or prevalanece, prepapr solns
+        if cumm:
+            prevalence = np.cumsum(data) # aggregate observed data
+            self.future = prevalence[-1] + np.cumsum(data_trimed)
+            solns = Pobs[ty]*self.solns[ty]
+            ylabel = 'Amount of accumulated cases'
+            title = 'Acumulados de ' + title
+        else:
+            prevalence = data # aggregate observed data
+            self.future = data_trimed
+            solns = np.diff( np.append( np.zeros((self.solns[ty].shape[0],1)), Pobs[ty]*self.solns[ty], axis=1), axis=1)
+            ylabel = 'Number of cases'
+            title = 'incidencia de ' + title
+
+        self.PlotEvolution_fm( solns=solns, prevalence=prevalence, pred=pred, ylabel=ylabel, log=log, ax=ax,\
+                       csv_fnam=csv_fnam, q=q, blue=blue, add_MRE=add_MRE,\
+                       color=color, color_q=color_q, label=label, right_axis=right_axis, label_cases=label_cases)
+
+        # Put a marker at intervention days, if within plotting area
+        for d in self.intervention_day[:-1]:
+            if self.init_index <= d < self.init_index+self.shift:
+                ax.axvline( self.days[d-self.init_index], color='black')
+        # Put a red marker at relax date, if within plotting area
+        for d in self.relax_day:
+            if self.init_index <= d < self.init_index+self.shift:
+                ax.axvline( self.days[d-self.init_index], color='red')
+
+        ax.set_title(self.Region + ' ' + title)
+        '''
+        }
+
+        PlotFit:{
+            defn:'PlotFit( self )'
+            body:
+            '''
+            """Plots basic results of the MCMC."""
+            if not(self.mcmc_samples):
+                print("MCMC samples not available.")
+                return
+
+            fig, axs = plt.subplots( nrows=2, ncols=2, figsize=(9,6), tight_layout=True)
+            self.PlotEvolution( ax=axs[0,0], pred=3, ty=0, cumm=False, log=False, every=1)
+            self.PlotEvolution( ax=axs[1,0], pred=3, ty=1, cumm=False, log=False, every=1)
+            axs[0,0].set_title(self.Region)
+            axs[0,0].get_legend().remove()
+            axs[0,0].set_ylabel('Confirmed cases')
+            axs[1,0].set_title('')
+            axs[1,0].get_legend().remove()
+            axs[1,0].set_ylabel('Decesos')
+
+            axs[0,1].plot(-self.twalk.Output[:,-1], 'k-')
+            axs[0,1].plot(-self.twalk.Output[:self.burnin,-1], 'b-')
+            axs[0,1].set_ylabel('LogPost')
+            axs[1,1].plot(-self.samples[:,-1], 'k-')
+            axs[1,1].set_ylabel('LogPost')
+            fig.tight_layout()
+            '''
+        }
+        PlotOmega:{
+            defn:'''PlotOmega(self, ax=None, sel=None, mul_f=False,\
+                  colors=['red', 'orange', 'gold', 'lawngreen', 'lightseagreen', 'royalblue', 'blueviolet'])'''
+            body:
+            '''
+            """Plot the estimated \omega population multipliers,
+               for relax_day != [] .
+
+               Args:
+
+                   sel: selection of omegas, (c1,c2), if None, select all
+                   mul_f: if True, multiply by self.f
+            """
+            if self.relax_day == []:
+                print("No relax_day, no \omega estimation.")
+                return
+
+            if ax == None:
+                fig = plt.figure(figsize=(8,6))
+                ax = fig.gca()
+            else:
+                fig = None
+
+            if sel != None:
+                ite = self.omega_ite[sel[0]:sel[1]]
+            else:
+                ite = self.omega_ite
+
+            if mul_f:
+                mul = self.f
+            else:
+                mul = 1
+
+            for c,i in enumerate(ite):
+                ax.hist(mul*self.samples[:,i-1], density=True, color='grey', alpha=0.2) #After relax_day
+                ax.hist(mul*self.samples[:,i-1], density=True, color=colors[c], histtype='step', linewidth=2) #After relax_day
+            if mul_f:
+                ax.set_xlabel(r"$f \ \omega$")
+            else:
+                ax.set_xlabel(r"$\omega$")
+            ax.set_ylabel(r"Densidad")
+            return ax
+            '''
+        }
+        PlotPanelEvolution:{
+            defn:'PlotPanelEvolution( self, pred1, pred2, ty)'
+            body:
+            '''
+            fig, axs = plt.subplots( nrows=2, ncols=2, sharex='col', figsize=(12,10), tight_layout=True)
+            self.PlotEvolution( ax=axs[0,0], pred=pred1, ty=ty, cumm=False, log=False, every=1)
+            self.PlotEvolution( ax=axs[1,0], pred=pred1, ty=ty, cumm=True, log=False, every=1)
+            axs[1,0].set_title('')
+            axs[1,0].get_legend().remove()
+
+            self.PlotEvolution( ax=axs[0,1], pred=pred2, ty=ty, cumm=False, log=False, every=1)
+            self.PlotEvolution( ax=axs[1,1], pred=pred2, ty=ty, cumm=True, log=False, every=1)
+            axs[1,1].set_title('')
+            axs[1,1].get_legend().remove()
+            #fig.tight_layout()
+            '''
+        }
+    }
+
+additionalMethods:{
+#Mainly used for overriding
+    SetTime:{
+        defn:'SetTime( self, shift=0)'
+        body:
+        '''
+        super().SetTime(shift=shift)
+        self.result_I = np.zeros(self.nn-1) # To hold result of quadrature
+        self.result_D = np.zeros(self.nn-1) # To hold result of quadrature
+        self.result_H1 = np.zeros(self.nn-1) # To hold result of quadrature
+        '''
+        }
+
+    GetMask:{
+            defn:"GetMask( self, v, E_range='all', as_col_vec=False)"
+            body:
+            '''
+            """Returns a mask to select variable v from grp_list.
+               E_range = [0] (default), first in the list, or original variable if no Erlang list.
+               E_range = 'all' use the whole Erlang list for variable
+               or provide E_range list manually.
+            """
+            return self.T.SelectMask( v, E_range=E_range, as_col_vec=as_col_vec)
+            '''
+        }
+
+    PrintConfigParameters:{
+            defn:'PrintConfigParameters( self, f=sys.stdout)'
+            body:
+            '''
+            """Prints all configuration parameters to file f (default sys.stdout)."""
+            keys=['Pobs_I', 'Pobs_D', 'f', 'g', 'h', 'i']
+            print("\nR_rates:", file=f)
+            for key in self.R_rates.keys():
+                print("%4s, %7s = %6.4f (%4.1f d), E_list= %2d" %\
+                      (key,self.R_rates[key][1],self.R_rates[key][0],1/self.R_rates[key][0],self.R_rates[key][2]), file=f)
+            print("", file=f)
+            for key in keys:
+                print("%s :" % (key,), file=f)
+                print(self._dict_[key], file=f)
+                print("", file=f)
+            '''
+        }
+
+    }
+
+additionalCallMethods:{
+    whatever:{
+            defn:'sdf'
+            body:
+            '''
+            sdf
+            '''
+        }
+        }
+}

@@ -19,7 +19,7 @@ Having a basic background in mathematical statistics, and even without any knowl
 You can install the package via Git:
 
 ```shell
-python -m pip install git+<this repo>
+python -m pip install git+https://github.com/victoriaepidemics/Victoria
 ```
 or you can download the tarball [victoriaepi-0.0.1.tar.gz](dist/victoriaepi-0.0.1.tar.gz) and run:
 

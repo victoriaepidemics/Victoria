@@ -719,6 +719,12 @@ class ama2_grp(victoria.mcmc):
 
         days = mdates.drange( self.init, self.init+dt.timedelta(shift), dt.timedelta(days=1)) # how often do de plot
         #days_pred = mdates.drange( self.init+dt.timedelta(shift), self.init+dt.timedelta(shift_pred), dt.timedelta(days=7)) # how often do de plot
+
+        #Solution to a reported bug with mdates.range
+        j=0
+        for x in range( self.init.toordinal(),  (self.init+dt.timedelta(shift)).toordinal(), 1):
+            days[j] = x
+            j = j+1
         self.days = days
 
         # To save all the data for the plot, len(mexico.days) rows with days
@@ -919,11 +925,3 @@ class ama2_grp(victoria.mcmc):
             ax.set_xlabel(r"$\omega$")
         ax.set_ylabel(r"Densidad")
         return ax
-
-
-
-
-
-
-
-

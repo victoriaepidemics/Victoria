@@ -21,7 +21,7 @@ from victoriaepi.ama import ama2
 
 
 
-"""Configuration parameters."""
+"""Configuration parameters"""
 
 # Exit probabilities,   f,    g,       h,   i = exit_probs
 exit_probs = [         0.5, 0.04375, 0.25, 0.5]  # Original
@@ -44,65 +44,7 @@ R_rates_V2=\
           'H^2':[1/6      , r'\gamma_3',  3],\
           'H^3':[1/3.3    , r'\gamma_4',  1]}
 
-"""
-def ReadInfoZMs(filename = 'Configuracion.csv', delim=',', workdir="./../"):
-    '''
-    Lee un archivo csv
-    Args:
-        filename(string): nombre del archivo csv
-        delim(string): separador de los datos en el archivo csv
-    Returns:
-        Un diccionario donde la llave es la primer columna y los datos las
-        columnas restantes
-    '''
-    mapeo = {}
-
-    file1 = open(workdir + filename, 'r')
-    count = 0
-
-    while True:
-        count += 1
-
-        # Get next line from file
-        line = file1.readline()
-
-        # if line is empty
-        # end of file is reached
-        if not line:
-            break
-        sline = line.strip()
-
-        data = sline.split(',')
-
-        print(data, flush=True)
-        mapeo[data[0]] = data[1:]
-        mapeo[data[0]][1] = int( mapeo[data[0]][1] )
-        mapeo[data[0]][2] = int( mapeo[data[0]][2] )
-
-        for i in range(4, len(data)):
-
-            dateString =data[i].split(' ')
-
-            mapeo[data[0]][i-1] = date( int(dateString[0]), int(dateString[1]), int(dateString[2]) )
-
-        mapeo[data[0]][3] = mapeo[data[0]][3] + timedelta(days=4) #fecha_inicio
-
-        if (mapeo[data[0]][1] == 0): #ama_1
-            if(data[0] != '9-01') and (len(data) > 6):
-                mapeo[data[0]][-1] = mapeo[data[0]][-1] + timedelta(days=4)
-        elif (mapeo[data[0]][1] > 0): #ama_2
-            if(data[0] != '9-01') and (len(data) > 7):
-                mapeo[data[0]][-2] = mapeo[data[0]][-2] + timedelta(days=4)
-
-
-        mapeo[data[0]].append("None")
-    file1.close()
-
-    return mapeo
-"""
-
 def AnalyzeZM( clave, T, trim=0, pred=100, init=date(2020, 4, 1), plot_fit=True, workdir="./../", burnin=500):
-
     # Transfer and standardization of reference date for graphing
     init=init
     ZMs[clave][3] += timedelta(days=4)
@@ -137,11 +79,9 @@ def AnalyzeZM( clave, T, trim=0, pred=100, init=date(2020, 4, 1), plot_fit=True,
         exit_probs=exit_probs_copy, R_rates=R_rates_V2, workdir=workdir)
 
     if T > 0:
-        #random.seed(1)
+        random.seed(1) # fix seed for reproducibility
         zm.RunMCMC(T=T, pred=pred, plot_fit=plot_fit, burnin=burnin)
     return zm
-
-
 
 
 dateparse = lambda x: datetime.strptime(x, '%Y-%m-%d') #To read the IRAG csv's
@@ -149,9 +89,7 @@ dateparse = lambda x: datetime.strptime(x, '%Y-%m-%d') #To read the IRAG csv's
 
 # Series of customized plots using PlotEvolution, PlotStateVar and PlotOmega
 def PlotFigsZMs( zm, pred=99, q=[10,25,50,75,90], blue=True, workdir='./../'):
-
     close('all')
-
     try:
         zm_vmx_Hosp_RI = read_csv(workdir + "data/hosp/%s_DinHospitales.csv" % (zm.clave,), parse_dates=['fecha'], date_parser=dateparse)
         hosp = True
@@ -282,20 +220,10 @@ if __name__=='__main__':
     os.makedirs(workdir+"data", exist_ok=True)
     os.makedirs(workdir+"data/hosp", exist_ok=True)
     os.makedirs(workdir+"csv", exist_ok=True)
-    # os.makedirs(workdir+"logs", exist_ok=True)
-    # os.makedirs(workdir+"latex", exist_ok=True)
-    # os.makedirs(workdir+"latex/images", exist_ok=True)
-
-
-
 
     T=10000  # 200000 # Usual number of iterations used for MCMC   # int(sys.argv[2])
-
     burnin=1000  # int(sys.argv[3])
-
     clave = "9-01"  # sys.argv[4]
-
-
 
     print(ZMs[clave], flush=True)
     print( "\n" + clave + " T=", T, " burnin=", burnin, flush=True)
